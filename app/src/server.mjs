@@ -219,8 +219,8 @@ async function openaiCompatChat(base, apiKey, compatModel, tools) {
       let j=null;
       if (ct.includes("application/json")) { try { j=JSON.parse(raw) } catch { j=null } }
       if (!r.ok) throw new Error((j && JSON.stringify(j).slice(0,400)) || raw.slice(0,400));
-      const cand = j?.candidates?.[0]?.content?.parts?.map(p=>p.text).filter(Boolean).join("
-") || "";
+      const cand = j?.candidates?.[0]?.content?.parts?.map(p=>p.text).filter(Boolean).join("\n") || "";
+
       return { reply: cand };
     }
 
