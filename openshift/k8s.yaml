@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: maximo-ai-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maximo-ai-agent-data
+  namespace: maximo-ai-agent
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: maximo-ai-agent-secrets
+  namespace: maximo-ai-agent
+type: Opaque
+stringData:
+  MAXIMO_URL: "https://salm.manage.salm.apps.mas9.znapz.net/maximo"
+  MAXIMO_APIKEY: "gopugo1oo0eva7068kubuv16vscnnk2v0dqvo4gd"
+  DEFAULT_SITEID: "ATTR"
+  MAXIMO_TENANT: "default"
+  MCP_URL: "http://mcp-server:8081"
+  ENABLE_MCP_TOOLS: "true"
+  TENANTS_JSON: ""
+  # Optionally provide AI provider credentials here
+  OPENAI_API_KEY: ""
+  OPENAI_BASE: "https://api.openai.com/v1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: maximo-ai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: maximo-ai-agent
+      component: app
+  template:
+    metadata:
+      labels:
+        app: maximo-ai-agent
+        component: app
+    spec:
+      containers:
+        - name: app
+          image: image-registry.openshift-image-registry.svc:5000/maximo-ai-agent/app:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: maximo-ai-agent-secrets
+          env:
+            - name: DATA_DIR
+              value: /data
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: maximo-ai-agent-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: maximo-ai-agent
+spec:
+  selector:
+    app: maximo-ai-agent
+    component: app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: app
+  namespace: maximo-ai-agent
+spec:
+  to:
+    kind: Service
+    name: app
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: maximo-ai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: maximo-ai-agent
+      component: mcp-server
+  template:
+    metadata:
+      labels:
+        app: maximo-ai-agent
+        component: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: image-registry.openshift-image-registry.svc:5000/maximo-ai-agent/mcp-server:latest
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: maximo-ai-agent-secrets
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: maximo-ai-agent
+spec:
+  selector:
+    app: maximo-ai-agent
+    component: mcp-server
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
