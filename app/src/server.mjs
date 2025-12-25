@@ -11,7 +11,7 @@ import { z } from "zod";
  *
  * This file runs the “AI Agent” HTTP server.
  * Fix applied: replaced invalid multiline string literals in `.join(" <newline> ")`
- * with `.join("\n")` (2 occurrences: OpenAI + Gemini response parsing).
+ * with `.join('\n')` (2 occurrences: OpenAI + Gemini response parsing).
  */
 
 // -----------------------------
@@ -28,7 +28,11 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 const PROVIDER = (process.env.LLM_PROVIDER || process.env.PROVIDER || "openai").toLowerCase();
 
-const ALLOW_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(s => s.trim()).filter(Boolean);
+const ALLOW_ORIGINS = (process.env.CORS_ORIGINS || "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
 
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS || "60000", 10);
@@ -190,6 +194,7 @@ async function callOpenAI({ message }) {
     const raw = await r.text();
     const ct = (r.headers.get("content-type") || "").toLowerCase();
     let j = null;
+
     if (ct.includes("application/json")) {
       try {
         j = JSON.parse(raw);
@@ -200,8 +205,8 @@ async function callOpenAI({ message }) {
 
     if (!r.ok) throw new Error(j?.error?.message || raw.slice(0, 400));
 
-    // ✅ FIX: join("\n") must be on one line; no multiline string literal
-    const out = (j?.content || []).map(x => x?.text).filter(Boolean).join("\n");
+    // join must NOT contain a literal newline between quotes
+    const out = (j?.content || []).map((x) => x?.text).filter(Boolean).join('\n');
     return { reply: out };
   } finally {
     cancel();
@@ -235,9 +240,9 @@ async function callGemini({ message }) {
 
     if (!r.ok) throw new Error((j && JSON.stringify(j).slice(0, 400)) || raw.slice(0, 400));
 
-    // ✅ FIX: join("\n") must be on one line; no multiline string literal
+    // join must NOT contain a literal newline between quotes
     const cand =
-      j?.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join("\n") || "";
+      j?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('\n') || "";
     return { reply: cand };
   } finally {
     cancel();
@@ -277,17 +282,17 @@ app.post("/tools/call", async (req, res) => {
   const { name, arguments: args } = parsed.data;
 
   try {
-    // Basic built-in tool: MCP invoke proxy
     if (name === "mcp.invoke") {
       const p2 = MCPInvokeSchema.safeParse(args);
       if (!p2.success) {
-        return res.status(400).json({ error: "Invalid mcp.invoke args", details: p2.error.flatten() });
+        return res
+          .status(400)
+          .json({ error: "Invalid mcp.invoke args", details: p2.error.flatten() });
       }
       const r = await mcpInvoke(p2.data);
       return res.json({ ok: true, result: r });
     }
 
-    // Unknown tool
     return res.status(400).json({ error: `Unknown tool: ${name}` });
   } catch (e) {
     res.status(500).json({ error: e?.message || String(e) });
@@ -299,6 +304,10 @@ app.post("/tools/call", async (req, res) => {
 // -----------------------------
 app.listen(PORT, () => {
   log(`[maximo-ai-agent-app] listening on :${PORT}`);
-  log(`[maximo-ai-agent-app] provider=${PROVIDER} model=${PROVIDER === "openai" ? OPENAI_MODEL : GEMINI_MODEL}`);
+  log(
+    `[maximo-ai-agent-app] provider=${PROVIDER} model=${
+      PROVIDER === "openai" ? OPENAI_MODEL : GEMINI_MODEL
+    }`
+  );
   log(`[maximo-ai-agent-app] mcp=${MCP_SERVER_URL ? MCP_SERVER_URL : "(not configured)"}`);
 });
